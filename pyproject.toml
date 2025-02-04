@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "temp_mail"
+version = "0.1.0"
+description = "A simple cli for temporary mail service"
+authors = [
+    { name = "Oyunsky", email = "cardisntvalid@yandex.ru" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Oyunsky/cli-todo"
+Repository = "https://github.com/Oyunsky/cli-todo.git"
+
+[project.scripts]
+tmail = "temp_mail.cli:main"
