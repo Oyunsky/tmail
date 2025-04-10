@@ -58,9 +58,11 @@ class Client:
 
     def _build_request(self, method, path):
         full_path = "/api/v3/email/" + path.lstrip("/")
-        request_line = "{} {} HTTP/1.1\r\n".format(method.upper(), full_path)
-        headers = "Host: {}\r\nConnection: keep-alive\r\n\r\n".format(self.host)
-        return request_line + headers
+        return (
+            f"{method.upper()} {full_path} HTTP/1.1\r\n"
+            f"Host: {self.host}\r\n"
+            "Connection: keep-alive\r\n\r\n"
+        )
 
     def _send(self, method, path):
         request = self._build_request(method, path)
@@ -94,7 +96,7 @@ class TempMail(Client):
         raise ValueError("Failed to extract email from response")
 
     def get_first_message(self):
-        self._send("GET", "{}/messages".format(self.email))
+        self._send("GET", f"{self.email}/messages")
         response = self._read()
         if not response:
             return ""
