@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "temp_mail"
-version = "0.1.0"
+version = "0.2.0"
 description = "A simple cli for temporary mail service"
 authors = [
     { name = "Oyunsky", email = "cardisntvalid@yandex.ru" }
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.6"
 dependencies = []
 
 [project.urls]

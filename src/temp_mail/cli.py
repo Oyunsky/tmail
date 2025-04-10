@@ -1,62 +1,130 @@
 import re
 import time
-import http.client as http_client
+import ssl
+import socket
 
 
-class APIClient:
-    __slots__ = ("_host", "_conn", "email")
+class Client:
+    __slots__ = ("host", "port", "_ssl_context", "_sock", "_ssock")
 
-    def __init__(self, *, verbose=True):
-        self._host = "api.internal.temp-mail.io"
-        self._conn  = http_client.HTTPSConnection(self._host)
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
 
-        self.email = self.create_email()
-        if verbose:
-            print(f"email: {self.email}")
+        self._create_socket()
+        self._connect()
 
     def __enter__(self):
         return self
 
-    def __exit__(self, *excs):
+    def __exit__(self, *args):
         self.close()
 
     def close(self):
-        if hasattr(self, "_conn"):
-            self._conn.close()
+        if hasattr(self, "_ssock"):
+            self._ssock.close()
+        if hasattr(self, "_sock"):
+            self._sock.close()
 
-    def _request_content(self, method, path):
-        self._conn.request(method, f"/api/v3/{path}")
-        response = self._conn.getresponse()
-        if response.status != 200:
-            raise ValueError(f"HTTP error: {response.status} {response.reason}")
-        return response.read().decode("utf-8")
+    def _create_socket(self):
+        self._ssl_context = ssl._create_unverified_context()
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._ssock = self._ssl_context.wrap_socket(self._sock, server_hostname=self.host)
+
+    def _connect(self):
+        self._ssock.connect((self.host, self.port))
+
+    def _read(self, buffer_size=1024):
+        response = bytearray()
+        while True:
+            try:
+                chunk = self._ssock.recv(buffer_size)
+                if not chunk:
+                    break
+                response.extend(chunk)
+
+                if b"\r\n\r\n" in response:
+                    headers, body = response.split(b"\r\n\r\n", 1)
+                    if b"Content-Length" in headers:
+                        match = re.search(br"Content-Length: (\d+)", headers)
+                        if match:
+                            content_length = int(match.group(1))
+                            if len(body) >= content_length:
+                                break
+            except socket.timeout:
+                print("ERROR: Timeout while reading response")
+                break
+        return bytes(response)
+
+    def _build_request(self, method, path):
+        full_path = "/api/v3/email/" + path.lstrip("/")
+        request_line = "{} {} HTTP/1.1\r\n".format(method.upper(), full_path)
+        headers = "Host: {}\r\nConnection: keep-alive\r\n\r\n".format(self.host)
+        return request_line + headers
+
+    def _send(self, method, path):
+        request = self._build_request(method, path)
+        self._ssock.sendall(request.encode("utf-8"))
+
+    @staticmethod
+    def extract_body(response_bytes):
+        parts = response_bytes.split(b"\r\n\r\n", 1)
+        return parts[1].decode("utf-8") if len(parts) > 1 else ""
+
+
+class TempMail(Client):
+    def __init__(self, verbose=True):
+        super(TempMail, self).__init__("api.internal.temp-mail.io", 443)
+        self.email = self.create_email()
+        if verbose:
+            print("email:", self.email)
 
     def create_email(self):
-        content = self._request_content("POST", "email/new")
-        if match := re.search(r'[\w\d]+@\w+\.\w+', content):
+        self._send("POST", "new")
+        response = self._read()
+        if not response:
+            raise ValueError("Empty response during email creation")
+
+        body = self.extract_body(response)
+
+        match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', body)
+        if match:
             return match.group(0)
-        raise ValueError("Failed to obtain email address")
 
-    def get_messages(self):
-        content = self._request_content("GET", f"email/{self.email}/messages")
-        if match := re.search(r'text":"([^"]+)","body', content):
-            return match.group(1)
+        raise ValueError("Failed to extract email from response")
 
-    def wait_message(self, *, max_attempts=10, delay=3):
-        for _ in range(max_attempts):
+    def get_first_message(self):
+        self._send("GET", "{}/messages".format(self.email))
+        response = self._read()
+        if not response:
+            return ""
+
+        match = re.search('text":"([^"]+)","body', response.decode())
+        if match:
+            return self._replace_symbols(match.group(1))
+        return ""
+
+    def wait_message(self, timeout=30):
+        for _ in range(timeout):
             try:
-                if message := self.get_messages():
+                message = self.get_first_message()
+                if message:
                     return message
-            except ConnectionError as err:
-                print(f"Error retrieving messages: {err}")
-            time.sleep(delay)
+            except (socket.error, ValueError) as err:
+                print("Error:", err)
+            time.sleep(1)
         return None
+
+    @staticmethod
+    def _replace_symbols(text):
+        text = text.replace("\\n", "\n")
+        return text
 
 
 def main():
     try:
-        with APIClient() as client:
-            message = client.wait_message()
+        with TempMail(verbose=True) as tm:
+            message = tm.wait_message()
             print(message if message else "Timeout: no messages received")
     except KeyboardInterrupt:
         exit(0)
@@ -64,4 +132,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
