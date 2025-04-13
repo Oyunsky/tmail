@@ -18,4 +18,4 @@ Homepage = "https://github.com/Oyunsky/cli-todo"
 Repository = "https://github.com/Oyunsky/cli-todo.git"
 
 [project.scripts]
-tmail = "temp_mail.cli:main"
+tmail = "tmail.cli:main"
