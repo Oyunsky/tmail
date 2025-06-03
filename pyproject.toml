@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "temp_mail"
-version = "0.2.0"
+version = "0.2.2"
 description = "A simple cli for temporary mail service"
 authors = [
     { name = "Oyunsky", email = "cardisntvalid@yandex.ru" }

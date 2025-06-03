@@ -1,6 +1,7 @@
 import re
-import time
 import ssl
+import time
+import json
 import socket
 
 
@@ -101,20 +102,27 @@ class TempMail(Client):
         if not response:
             return ""
 
-        match = re.search('text":"([^"]+)","body', response.decode())
-        if match:
-            return self._replace_symbols(match.group(1))
-        return ""
+        body = self.extract_body(response)
+        data = json.loads(body)
+        return "\n\n".join(item.get("body_text", "") for item in data)
 
-    def wait_message(self, timeout=30):
-        for _ in range(timeout):
-            try:
-                message = self.get_first_message()
-                if message:
+    def read_message(self):
+        try:
+            return self.get_first_message() or None
+        except (socket.error, ValueError) as err:
+            print("Error:", err)
+
+    def wait_message(self, timeout=0):
+        if timeout:
+            for _ in range(timeout):
+                if message := self.read_message():
                     return message
-            except (socket.error, ValueError) as err:
-                print("Error:", err)
-            time.sleep(1)
+                time.sleep(1)
+        else:
+            while True:
+                if message := self.read_message():
+                    return message
+                time.sleep(1)
         return None
 
     @staticmethod
